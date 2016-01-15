@@ -3,17 +3,18 @@
 
 // initialize the library with the numbers of the interface pins
 Deuligne lcd;
-const int pausePin = 10;
-const int upPin = 11;
+const int pausePin = 1;
+const int hoursDownPin = 2;
+const int hoursUpPin = 3;
+const int minutesDownPin = 4;
+const int minutesUpPin = 5;
 
-unsigned int seconds;
-unsigned int minutes;
-unsigned int hours;
-unsigned long previous;
+int seconds;
+int minutes;
+int hours;unsigned long previous;
 unsigned long current;
+bool pins[15];
 bool paused;
-bool pausePressed;
-bool upPressed;
 
 void setup() {
   // set up the LCD's number of columns and rows: 
@@ -21,10 +22,13 @@ void setup() {
   reset();
   previous = 0;
   paused = false;
-  pausePressed = false;
+
+  for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
+    pins[i] = false;
+  }
 
   pinMode(pausePin, INPUT);
-  pinMode(upPin, INPUT);
+  pinMode(hoursUpPin, INPUT);
 }
 
 void loop() {
@@ -35,27 +39,16 @@ void loop() {
       incrementSeconds();
     }
   }
-  else {
-    if(digitalRead(upPin) == HIGH) {
-      if(!upPressed) {
-        upPressed = true;  
-        incrementMinutes();
-      }
-    } else if(upPressed) {
-      upPressed = false;
-    }
-  }
-  if(digitalRead(pausePin) == HIGH) {
-    if(!pausePressed) {
-      pausePressed = true;
+  if(getPinState(hoursDownPin) == HIGH) decrementHours();
+  if(getPinState(hoursUpPin) == HIGH) incrementHours();
+  if(getPinState(minutesDownPin) == HIGH) decrementMinutes();
+  if(getPinState(minutesUpPin) == HIGH) incrementMinutes();
+
+  if(getPinState(pausePin) == HIGH) {
       paused = !paused;
-    }
-  } else if(pausePressed) {
-    pausePressed = false;
   }
   lcd.setCursor(0, 0);
   lcd.print(toString(hours) + ":" + toString(minutes) + ":" + toString(seconds));
-
 }
 
 void reset() {
@@ -72,6 +65,13 @@ void incrementSeconds() {
   }
 }
 
+void decrementSeconds() {
+  seconds++;
+  if(seconds < 0) {
+    seconds = 59;
+  }
+}
+
 void incrementMinutes() {
   minutes++;
   if(minutes == 60) {
@@ -80,11 +80,40 @@ void incrementMinutes() {
   }
 }
 
+void decrementMinutes() {
+  minutes--;
+  if(minutes < 0) {
+    minutes = 59;
+  }
+}
+
 void incrementHours() {
   hours++;
   if(hours == 24) {
     hours = 0;
   }
+}
+
+void decrementHours() {
+  hours--;
+  if(hours < 0) {
+    hours = 23;
+  }
+}
+
+int getPinState(int num) {
+  bool pressed = pins[num];
+  if(digitalRead(num) == HIGH) {
+    if(!pressed) {
+      pins[num] = true;
+      return HIGH;
+    }
+  } else {
+    if(pressed) {
+      pins[num] = false;
+    }
+  }
+  return LOW;
 }
 
 String toString(int num) {
