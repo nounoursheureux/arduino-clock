@@ -4,23 +4,82 @@
 // initialize the library with the numbers of the interface pins
 Deuligne lcd;
 const int pausePin = 1;
-const int hoursDownPin = 2;
-const int hoursUpPin = 3;
-const int minutesDownPin = 4;
-const int minutesUpPin = 5;
+const int leftPin = 2;
+const int rightPin = 3;
+const int decrementPin = 4;
+const int incrementPin = 5;
 
 int seconds;
 int minutes;
-int hours;unsigned long previous;
-unsigned long current;
+int hours;
+int cursorPos;
+unsigned long previous;
+unsigned long blinkBegin;
 bool pins[15];
 bool paused;
+int focused = 0;
+
+struct Time {
+  int seconds;
+  int minutes;
+  int hours;
+
+  Time(int h, int m, int s): seconds(s), minutes(m), hours(h) {
+  }
+
+  void incrementSeconds() {
+    seconds++;
+    if(seconds >= 60) {
+      seconds = 0;
+      incrementMinutes();
+    }
+  }
+
+  void incrementMinutes() {
+    minutes++;
+    if(minutes >= 60) {
+      minutes = 0;
+      incrementHours();
+    }
+  }
+
+  void incrementHours() {
+    hours++;
+    if(hours >= 24) {
+      hours = 0;
+    }
+  }
+
+  void decrementSeconds() {
+    seconds--;
+    if(seconds < 0) {
+      seconds = 59;
+    }
+  }
+
+  void decrementMinutes() {
+    minutes--;
+    if(minutes < 0) {
+      minutes = 59;
+    }
+  }
+
+  void decrementHours() {
+    hours--;
+    if(hours < 0) {
+      hours = 23;
+    }
+  }
+};
 
 void setup() {
   // set up the LCD's number of columns and rows: 
   lcd.init();
+  lcd.setCursor(0, 0);
+  lcd.print("00:00:00");
   reset();
   previous = 0;
+  cursorPos = 0;
   paused = false;
 
   for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
@@ -28,27 +87,27 @@ void setup() {
   }
 
   pinMode(pausePin, INPUT);
-  pinMode(hoursUpPin, INPUT);
+  pinMode(rightPin, INPUT);
 }
 
 void loop() {
   if(!paused) {
-    current = millis();
-    if(current >= previous + 1000) {
-      previous = current;
+    if(millis() >= previous + 1000) {
+      previous += 1000;
       incrementSeconds();
     }
+  } else {
+    previous = millis();
+    if(getPinState(leftPin) == HIGH) moveLeft();
+    if(getPinState(rightPin) == HIGH) moveRight();
+    if(getPinState(decrementPin) == HIGH) decrement();
+    if(getPinState(incrementPin) == HIGH) increment();
   }
-  if(getPinState(hoursDownPin) == HIGH) decrementHours();
-  if(getPinState(hoursUpPin) == HIGH) incrementHours();
-  if(getPinState(minutesDownPin) == HIGH) decrementMinutes();
-  if(getPinState(minutesUpPin) == HIGH) incrementMinutes();
-
   if(getPinState(pausePin) == HIGH) {
-      paused = !paused;
+    paused = !paused;
+    if(paused) lcd.cursor();
+    else lcd.noCursor();
   }
-  lcd.setCursor(0, 0);
-  lcd.print(toString(hours) + ":" + toString(minutes) + ":" + toString(seconds));
 }
 
 void reset() {
@@ -57,12 +116,69 @@ void reset() {
   seconds = 0;
 }
 
+void moveLeft() {
+  if(cursorPos > 0) {
+    cursorPos--;
+    updateCursor();
+  }
+}
+
+void moveRight() {
+  if(cursorPos < 2) {
+    cursorPos++;
+    updateCursor();
+  }
+}
+
+void updateCursor() {
+  lcd.setCursor(cursorPos * 3, 0);
+}
+
+void increment() {
+  switch(cursorPos) {
+    case 0:
+      incrementHours();
+      break;
+
+    case 1:
+      incrementMinutes();
+      break;
+
+    case 2:
+      incrementSeconds();
+      break;
+
+    default:
+      break;
+  }
+}
+
+void decrement() {
+  switch(cursorPos) {
+    case 0:
+      decrementHours();
+      break;
+
+    case 1:
+      decrementMinutes();
+      break;
+
+    case 2:
+      decrementSeconds();
+      break;
+
+    default:
+      break;
+  }
+}
+
 void incrementSeconds() {
   seconds++;
   if(seconds == 60) {
+    seconds = 0;
     incrementMinutes();
-    seconds = 0;  
   }
+  printSeconds();
 }
 
 void decrementSeconds() {
@@ -70,6 +186,13 @@ void decrementSeconds() {
   if(seconds < 0) {
     seconds = 59;
   }
+  printSeconds();
+}
+
+void printSeconds() {
+  lcd.setCursor(6, 0);
+  lcd.print(toString(seconds));
+  updateCursor(); 
 }
 
 void incrementMinutes() {
@@ -78,6 +201,7 @@ void incrementMinutes() {
     minutes = 0;
     incrementHours();
   }
+  printMinutes();
 }
 
 void decrementMinutes() {
@@ -85,6 +209,13 @@ void decrementMinutes() {
   if(minutes < 0) {
     minutes = 59;
   }
+  printMinutes();
+}
+
+void printMinutes() {
+  lcd.setCursor(3, 0);
+  lcd.print(toString(minutes));
+  updateCursor(); 
 }
 
 void incrementHours() {
@@ -92,6 +223,7 @@ void incrementHours() {
   if(hours == 24) {
     hours = 0;
   }
+  printHours();
 }
 
 void decrementHours() {
@@ -99,6 +231,13 @@ void decrementHours() {
   if(hours < 0) {
     hours = 23;
   }
+  printHours();
+}
+
+void printHours() {
+  lcd.setCursor(0, 0);
+  lcd.print(toString(hours));
+  updateCursor();
 }
 
 int getPinState(int num) {
