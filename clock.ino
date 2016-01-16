@@ -1,30 +1,12 @@
 #include "Wire.h"
 #include <Deuligne.h>
 
-// initialize the library with the numbers of the interface pins
-Deuligne lcd;
-const int pausePin = 1;
-const int leftPin = 2;
-const int rightPin = 3;
-const int decrementPin = 4;
-const int incrementPin = 5;
-
-int seconds;
-int minutes;
-int hours;
-int cursorPos;
-unsigned long previous;
-unsigned long blinkBegin;
-bool pins[15];
-bool paused;
-int focused = 0;
-
 struct Time {
   int seconds;
   int minutes;
   int hours;
 
-  Time(int h, int m, int s): seconds(s), minutes(m), hours(h) {
+  Time(int h=0, int m=0, int s=0): seconds(s), minutes(m), hours(h) {
   }
 
   void incrementSeconds() {
@@ -70,190 +52,14 @@ struct Time {
       hours = 23;
     }
   }
+
+  void reset(int h=0, int m=0, int s=0) {
+    hours = h;
+    minutes = m;
+    seconds = s;
+  }
 };
 
-void setup() {
-  // set up the LCD's number of columns and rows: 
-  lcd.init();
-  lcd.setCursor(0, 0);
-  lcd.print("00:00:00");
-  reset();
-  previous = 0;
-  cursorPos = 0;
-  paused = false;
-
-  for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
-    pins[i] = false;
-  }
-
-  pinMode(pausePin, INPUT);
-  pinMode(rightPin, INPUT);
-}
-
-void loop() {
-  if(!paused) {
-    if(millis() >= previous + 1000) {
-      previous += 1000;
-      incrementSeconds();
-    }
-  } else {
-    previous = millis();
-    if(getPinState(leftPin) == HIGH) moveLeft();
-    if(getPinState(rightPin) == HIGH) moveRight();
-    if(getPinState(decrementPin) == HIGH) decrement();
-    if(getPinState(incrementPin) == HIGH) increment();
-  }
-  if(getPinState(pausePin) == HIGH) {
-    paused = !paused;
-    if(paused) lcd.cursor();
-    else lcd.noCursor();
-  }
-}
-
-void reset() {
-  hours = 0;
-  minutes = 0;
-  seconds = 0;
-}
-
-void moveLeft() {
-  if(cursorPos > 0) {
-    cursorPos--;
-    updateCursor();
-  }
-}
-
-void moveRight() {
-  if(cursorPos < 2) {
-    cursorPos++;
-    updateCursor();
-  }
-}
-
-void updateCursor() {
-  lcd.setCursor(cursorPos * 3, 0);
-}
-
-void increment() {
-  switch(cursorPos) {
-    case 0:
-      incrementHours();
-      break;
-
-    case 1:
-      incrementMinutes();
-      break;
-
-    case 2:
-      incrementSeconds();
-      break;
-
-    default:
-      break;
-  }
-}
-
-void decrement() {
-  switch(cursorPos) {
-    case 0:
-      decrementHours();
-      break;
-
-    case 1:
-      decrementMinutes();
-      break;
-
-    case 2:
-      decrementSeconds();
-      break;
-
-    default:
-      break;
-  }
-}
-
-void incrementSeconds() {
-  seconds++;
-  if(seconds == 60) {
-    seconds = 0;
-    incrementMinutes();
-  }
-  printSeconds();
-}
-
-void decrementSeconds() {
-  seconds++;
-  if(seconds < 0) {
-    seconds = 59;
-  }
-  printSeconds();
-}
-
-void printSeconds() {
-  lcd.setCursor(6, 0);
-  lcd.print(toString(seconds));
-  updateCursor(); 
-}
-
-void incrementMinutes() {
-  minutes++;
-  if(minutes == 60) {
-    minutes = 0;
-    incrementHours();
-  }
-  printMinutes();
-}
-
-void decrementMinutes() {
-  minutes--;
-  if(minutes < 0) {
-    minutes = 59;
-  }
-  printMinutes();
-}
-
-void printMinutes() {
-  lcd.setCursor(3, 0);
-  lcd.print(toString(minutes));
-  updateCursor(); 
-}
-
-void incrementHours() {
-  hours++;
-  if(hours == 24) {
-    hours = 0;
-  }
-  printHours();
-}
-
-void decrementHours() {
-  hours--;
-  if(hours < 0) {
-    hours = 23;
-  }
-  printHours();
-}
-
-void printHours() {
-  lcd.setCursor(0, 0);
-  lcd.print(toString(hours));
-  updateCursor();
-}
-
-int getPinState(int num) {
-  bool pressed = pins[num];
-  if(digitalRead(num) == HIGH) {
-    if(!pressed) {
-      pins[num] = true;
-      return HIGH;
-    }
-  } else {
-    if(pressed) {
-      pins[num] = false;
-    }
-  }
-  return LOW;
-}
 
 String toString(int num) {
   switch(num) {
@@ -292,3 +98,189 @@ String toString(int num) {
   }
 }
 
+
+struct TimePrinter {
+  Time t;
+  Deuligne* lcd;
+  int posX, posY;
+  int offset;
+
+  TimePrinter(Deuligne* l, int x, int y, int hours=0, int minutes=0, int seconds=0): lcd(l), posX(x), posY(y), t(hours, minutes, seconds) {
+    offset = 0;
+  }
+
+  void init() {
+    lcd->setCursor(posX, posY);
+    lcd->print("00:00:00");
+  }
+
+  void updateCursor() {
+    lcd->setCursor(posX + offset * 3, posY);  
+  }
+  
+  void incrementHours() {
+    t.incrementHours();
+    printHours();
+  }
+
+  void decrementHours() {
+    t.decrementHours();
+    printHours();
+  }
+
+  void printHours() {
+    offset = 0;
+    updateCursor();
+    lcd->print(toString(t.hours));
+    updateCursor();
+  }
+
+  void incrementMinutes() {
+    t.incrementMinutes();
+    printMinutes();
+  }
+
+  void decrementMinutes() {
+    t.decrementMinutes();
+    printMinutes();
+  }
+
+  void printMinutes() {
+    offset = 1;
+    updateCursor();
+    lcd->print(toString(t.minutes));
+    updateCursor();
+  }
+
+  void incrementSeconds() {
+    t.incrementSeconds();
+    printSeconds();
+  }
+
+  void decrementSeconds() {
+    t.decrementSeconds();
+    printSeconds();
+  }
+
+  void printSeconds() {
+    offset = 2;
+    updateCursor();
+    lcd->print(toString(t.seconds));
+    updateCursor();
+  }
+
+  void moveLeft() {
+    if(offset > 0) {
+      offset--;
+      updateCursor();
+    }
+  }
+
+  void moveRight() {
+    if(offset < 2) {
+      offset++;
+      updateCursor();
+    }
+  }
+
+  void increment() {
+    switch(offset) {
+      case 0:
+        incrementHours();
+        break;
+
+      case 1:
+        incrementMinutes();
+        break;
+
+      case 2:
+        incrementSeconds();
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  void decrement() {
+    switch(offset) {
+      case 0:
+        decrementHours();
+        break;
+
+      case 1:
+        decrementMinutes();
+        break;
+
+      case 2:
+        decrementSeconds();
+        break;
+
+      default:
+        break;
+    }
+  }
+};
+
+// initialize the library with the numbers of the interface pins
+Deuligne lcd;
+TimePrinter current(&lcd, 0, 0);
+const int pausePin = 1;
+const int leftPin = 2;
+const int rightPin = 3;
+const int decrementPin = 4;
+const int incrementPin = 5;
+
+unsigned long previous;
+bool pins[15];
+bool paused;
+
+void setup() {
+  // set up the LCD's number of columns and rows: 
+  lcd.init();
+  current.init();
+  previous = 0;
+  paused = false;
+
+  for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
+    pins[i] = false;
+  }
+
+  pinMode(pausePin, INPUT);
+  pinMode(rightPin, INPUT);
+}
+
+void loop() {
+  if(!paused) {
+    if(millis() >= previous + 1000) {
+      previous += 1000;
+      current.incrementSeconds();
+    }
+  } else {
+    previous = millis();
+    if(getPinState(leftPin) == HIGH) current.moveLeft();
+    if(getPinState(rightPin) == HIGH) current.moveRight();
+    if(getPinState(decrementPin) == HIGH) current.decrement();
+    if(getPinState(incrementPin) == HIGH) current.increment();
+  }
+  if(getPinState(pausePin) == HIGH) {
+    paused = !paused;
+    if(paused) lcd.cursor();
+    else lcd.noCursor();
+  }
+}
+
+int getPinState(int num) {
+  bool pressed = pins[num];
+  if(digitalRead(num) == HIGH) {
+    if(!pressed) {
+      pins[num] = true;
+      return HIGH;
+    }
+  } else {
+    if(pressed) {
+      pins[num] = false;
+    }
+  }
+  return LOW;
+}
