@@ -13,11 +13,8 @@ int seconds;
 int minutes;
 int hours;
 int cursorPos;
-unsigned long previous;
 unsigned long blinkBegin;
 bool pins[15];
-bool paused;
-int focused = 0;
 
 String toString(int num) {
   switch(num) {
@@ -112,19 +109,25 @@ struct Time {
 class TimePrinter
 {
   int mPositionX, mPositionY;
+  
   public:
     Time time;
+    bool paused;
+    
     TimePrinter(int hours, int minutes, int seconds, int positionX, int positionY): time(hours, minutes, seconds)
     {
+      paused = false;    
       mPositionX = positionX;
       mPositionY = positionY;
     }
 
+    virtual void update() = 0;
+    
     void print()
     {
       lcd.setCursor(mPositionX, mPositionY);
       lcd.print(toString(time.hours) + String(":") + toString(time.minutes) + String(":") + toString(time.seconds));
-      lcd.setCursor(mPositionX + cursorPos * 3, mPositionY);
+      updateCursor();
     }
 
     void increment()
@@ -173,22 +176,11 @@ class TimePrinter
       print();
     }
 
-    void moveLeft()
+    void moveCursor()
     {
-      if(cursorPos > 0)
-      {
-        cursorPos--;
-        updateCursor();
-      }
-    }
-
-    void moveRight()
-    {
-      if(cursorPos < 2)
-      {
-        cursorPos++;
-        updateCursor();
-      }
+      cursorPos++;
+      if(cursorPos > 2) cursorPos = 0;
+      updateCursor();
     }
 
     void updateCursor()
@@ -197,16 +189,61 @@ class TimePrinter
     }
 };
 
-TimePrinter current(0, 0, 0, 0, 0);
+class RunningTimePrinter: public TimePrinter
+{
+  private:
+    unsigned long previous = 0;
+    
+  public:
+    RunningTimePrinter(int h, int m, int s, int x, int y): TimePrinter(h, m, s, x, y)
+    {
+      
+    }
+    
+    void update()
+    {
+      if(!paused)
+      {
+        if(millis() >= previous + 1000)
+        {
+          previous += 1000;
+          time.incrementSeconds(true);
+          print();
+        }
+      } else {
+        previous = millis();
+        if(getPinState(rightPin) == HIGH) moveCursor();
+        if(getPinState(decrementPin) == HIGH) decrement();
+        if(getPinState(incrementPin) == HIGH) increment();
+      }
+      
+      if(getPinState(pausePin) == HIGH) {
+        paused = !paused;
+        if(paused) lcd.cursor();
+        else lcd.noCursor();
+      }
+    }
+};
+
+class AlarmTimePrinter: public TimePrinter
+{
+  public:
+    AlarmTimePrinter(int h, int m, int s, int x, int y): TimePrinter(h, m, s, x, y)
+    {
+    }
+    
+    void update()
+    {
+    }
+};
+
+RunningTimePrinter current(0, 0, 0, 0, 0);
+AlarmTimePrinter wakeup(0, 0, 0, 2, 1);
 
 void setup() {
   // set up the LCD's number of columns and rows: 
   lcd.init();
-  // lcd.setCursor(0, 0);
-  // lcd.print("00:00:00");
-  previous = 0;
   cursorPos = 0;
-  paused = false;
 
   for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
     pins[i] = false;
@@ -215,31 +252,11 @@ void setup() {
   pinMode(pausePin, INPUT);
   pinMode(rightPin, INPUT);
   current.print();
+  wakeup.print();
 }
 
 void loop() {
-  if(!paused) {
-    if(millis() >= previous + 1000) {
-      previous += 1000;
-      current.time.incrementSeconds(true);
-      current.print();
-    }
-  } else {
-    previous = millis();
-    if(getPinState(leftPin) == HIGH) current.moveLeft();
-    if(getPinState(rightPin) == HIGH) current.moveRight();
-    if(getPinState(decrementPin) == HIGH) {
-      current.decrement();
-    }
-    if(getPinState(incrementPin) == HIGH) {
-      current.increment();
-    }
-  }
-  if(getPinState(pausePin) == HIGH) {
-    paused = !paused;
-    if(paused) lcd.cursor();
-    else lcd.noCursor();
-  }
+  current.update();
 }
 
 int getPinState(int num) {
