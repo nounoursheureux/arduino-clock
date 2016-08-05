@@ -2,19 +2,11 @@
 #include <Deuligne.h>
 
 // initialize the library with the numbers of the interface pins
-Deuligne lcd;
-const int pausePin = 1;
-const int leftPin = 2;
-const int rightPin = 3;
+const int pauseCurrentPin = 1;
+const int pauseAlarmPin = 2;
+const int moveCursorPin = 3;
 const int decrementPin = 4;
 const int incrementPin = 5;
-
-int seconds;
-int minutes;
-int hours;
-int cursorPos;
-unsigned long blinkBegin;
-bool pins[15];
 
 String toString(int num) {
   switch(num) {
@@ -104,9 +96,55 @@ struct Time {
       hours = 23;
     }
   }
+
+  bool operator==(const Time& t2)
+  {
+    return hours == t2.hours && minutes == t2.minutes && seconds == t2.seconds; 
+  }
 };
 
-class TimePrinter
+class Clock
+{
+  Deuligne* lcd;
+  Time current;
+  Time alarm;
+  bool alarm_enabled;
+  unsigned long previous_millis;
+  bool current_paused;
+  bool alarm_paused;
+
+  public:
+    Clock(Deuligne* p_lcd, int hours, int minutes, int seconds): lcd(p_lcd), current(hours, minutes, seconds), alarm(0, 0, 0), alarm_enabled(false), previous_millis(0), current_paused(false), alarm_paused(false)
+    {
+    }
+
+    void print()
+    {
+      lcd->setCursor(0, 0);
+      lcd->print(toString(current.hours) + String(":") + toString(current.minutes) + String(":") + toString(current.seconds));
+    }
+
+    void update()
+    {
+      if (current_paused)
+      {
+        previous_millis = millis();
+      } 
+      else if (previous_millis + 1000 <= millis())
+      {
+        current.incrementSeconds(true);
+        previous_millis += 1000;
+        print();
+      }
+
+      if (getPinState(pauseCurrentPin) == HIGH)
+      {
+        current_paused = !current_paused;
+      }
+    }
+};
+
+/* class TimePrinter
 {
   int mPositionX, mPositionY;
   
@@ -187,6 +225,22 @@ class TimePrinter
     {
       lcd.setCursor(mPositionX + cursorPos * 3, mPositionY);
     }
+
+    void togglePause()
+    {
+      if(!paused && canPause)
+      {
+        paused = true;
+        lcd.cursor();
+        updateCursor();
+
+      }
+      else if(paused)
+      {
+        paused = false;
+        lcd.noCursor();
+      }
+    }
 };
 
 class RunningTimePrinter: public TimePrinter
@@ -208,22 +262,22 @@ class RunningTimePrinter: public TimePrinter
         {
           previous += 1000;
           time.incrementSeconds(true);
-          print();
+          if(canPause) print();
         }
       } else {
         previous = millis();
-        if(getPinState(rightPin) == HIGH) moveCursor();
+        if(getPinState(moveCursorPin) == HIGH) moveCursor();
         if(getPinState(decrementPin) == HIGH) decrement();
         if(getPinState(incrementPin) == HIGH) increment();
       }
       
-      if(getPinState(pausePin) == HIGH) {
-        paused = !paused;
-        if(paused) lcd.cursor();
-        else lcd.noCursor();
+      if(getPinState(pauseCurrentPin) == HIGH) {
+        togglePause();
       }
     }
 };
+
+RunningTimePrinter current(0, 0, 0, 0, 0);
 
 class AlarmTimePrinter: public TimePrinter
 {
@@ -234,29 +288,51 @@ class AlarmTimePrinter: public TimePrinter
     
     void update()
     {
+      if(paused)
+      {
+        if(getPinState(moveCursorPin) == HIGH) moveCursor();
+        if(getPinState(decrementPin) == HIGH) decrement();
+        if(getPinState(incrementPin) == HIGH) increment();
+      }
+
+      // if(time == current.time) lcd.noDisplay();
+      
+      if(getPinState(pauseAlarmPin) == HIGH) {
+        togglePause();
+      }
     }
-};
+}; */
 
-RunningTimePrinter current(0, 0, 0, 0, 0);
-AlarmTimePrinter wakeup(0, 0, 0, 2, 1);
-
+// AlarmTimePrinter alarm(0, 0, 0, 2, 1);
+int cursorPos;
+bool canPause;
+unsigned long blinkBegin;
+bool pins[15];
+Deuligne lcd;
+Clock clock(&lcd, 0, 0, 0);
 void setup() {
   // set up the LCD's number of columns and rows: 
   lcd.init();
-  cursorPos = 0;
 
   for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
     pins[i] = false;
   }
 
-  pinMode(pausePin, INPUT);
-  pinMode(rightPin, INPUT);
-  current.print();
-  wakeup.print();
+  pinMode(pauseCurrentPin, INPUT);
+  pinMode(pauseAlarmPin, INPUT);
+  pinMode(moveCursorPin, INPUT);
+  pinMode(incrementPin, INPUT);
+  pinMode(decrementPin, INPUT);
+  /* current.print();
+  alarm.print(); */
+  clock.print();
 }
 
 void loop() {
-  current.update();
+  /* current.update();
+  alarm.update();
+  canPause = !(current.paused || alarm.paused); */
+  clock.update();
 }
 
 int getPinState(int num) {
