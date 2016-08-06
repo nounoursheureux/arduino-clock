@@ -8,6 +8,8 @@ const int moveCursorPin = 3;
 const int decrementPin = 4;
 const int incrementPin = 5;
 
+const byte ARROW_CHAR = 1;
+
 String toString(int num) {
   switch(num) {
     case 0:
@@ -101,47 +103,6 @@ struct Time {
   {
     return hours == t2.hours && minutes == t2.minutes && seconds == t2.seconds; 
   }
-};
-
-class Clock
-{
-  Deuligne* lcd;
-  Time current;
-  Time alarm;
-  bool alarm_enabled;
-  unsigned long previous_millis;
-  bool current_paused;
-  bool alarm_paused;
-
-  public:
-    Clock(Deuligne* p_lcd, int hours, int minutes, int seconds): lcd(p_lcd), current(hours, minutes, seconds), alarm(0, 0, 0), alarm_enabled(false), previous_millis(0), current_paused(false), alarm_paused(false)
-    {
-    }
-
-    void print()
-    {
-      lcd->setCursor(0, 0);
-      lcd->print(toString(current.hours) + String(":") + toString(current.minutes) + String(":") + toString(current.seconds));
-    }
-
-    void update()
-    {
-      if (current_paused)
-      {
-        previous_millis = millis();
-      } 
-      else if (previous_millis + 1000 <= millis())
-      {
-        current.incrementSeconds(true);
-        previous_millis += 1000;
-        print();
-      }
-
-      if (getPinState(pauseCurrentPin) == HIGH)
-      {
-        current_paused = !current_paused;
-      }
-    }
 };
 
 /* class TimePrinter
@@ -303,17 +264,95 @@ class AlarmTimePrinter: public TimePrinter
     }
 }; */
 
+class Clock
+{
+  Deuligne* lcd;
+  Time current;
+  Time alarm;
+  bool alarm_enabled;
+  unsigned long previous_millis;
+  bool current_paused;
+  bool alarm_paused;
+  int editing;
+ 
+  public:
+    Clock(Deuligne* p_lcd, int hours, int minutes, int seconds): lcd(p_lcd), current(hours, minutes, seconds), alarm(0, 0, 0), alarm_enabled(false), previous_millis(0), current_paused(false), alarm_paused(false), editing(0)
+    {
+    }
+
+    void print()
+    {
+      lcd->setCursor(0, 0);
+      lcd->print(toString(current.hours) + String(":") + toString(current.minutes) + String(":") + toString(current.seconds));
+      if (current_paused)
+      {
+        lcd->setCursor(0, 1);
+        for (int i = 0; i < 9; ++i)
+        {
+          if (i == editing * 3)
+          {
+            lcd->write(ARROW_CHAR);
+          }
+          else
+          {
+            lcd->print(" ");
+          }
+        }
+        lcd->write(ARROW_CHAR);
+      }
+    }
+
+    void update()
+    {
+      if (current_paused)
+      {
+        previous_millis = millis();
+      } 
+      else if (previous_millis + 1000 <= millis())
+      {
+        current.incrementSeconds(true);
+        previous_millis += 1000;
+      }
+
+      print();
+
+      if (getPinState(pauseCurrentPin) == HIGH)
+      {
+        current_paused = !current_paused;
+      }
+
+      if (current_paused && getPinState(moveCursorPin) == HIGH)
+      {
+        editing++;
+        if (editing > 2)
+        {
+          editing = 0;
+        }
+      }
+    }
+};
+
 // AlarmTimePrinter alarm(0, 0, 0, 2, 1);
-int cursorPos;
-bool canPause;
 unsigned long blinkBegin;
 bool pins[15];
 Deuligne lcd;
 Clock clock(&lcd, 0, 0, 0);
-void setup() {
-  // set up the LCD's number of columns and rows: 
-  lcd.init();
 
+byte arrow[8] = {
+  B00100,
+  B01110,
+  B11111,
+  B11111,
+  B00000,
+  B00000,
+  B00000,
+  B00000
+};
+
+void setup() {
+  lcd.init();
+  lcd.createChar(1, arrow);
+  
   for(int i = 0; i < sizeof(pins)/sizeof(*pins); i++) {
     pins[i] = false;
   }
